@@ -22,11 +22,14 @@ openai = AsyncOpenAI()
 async def main(input_text: str) -> None:
     start_time = time.time()
 
+    print(f"Reading: {input_text}")
     async with openai.audio.speech.with_streaming_response.create(
-        model="tts-1",
-        voice="alloy",
-        response_format="pcm",  # similar to WAV, but without a header chunk at the start.
+        model="gpt-4o-mini-tts",
+        # model="tts-1-hd",
+        voice="coral",
+        response_format="pcm",
         input=input_text,
+        # instruction="Read this text aloud.",
     ) as response:
         print(f"Time to first byte: {int((time.time() - start_time) * 1000)}ms")
         await LocalAudioPlayer().play(response)
