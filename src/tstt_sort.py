@@ -37,7 +37,7 @@
 """
 
 from math import ceil, log
-from itertools import combinations
+from itertools import combinations, pairwise
 
 from trueskillthroughtime import History
 
@@ -70,47 +70,46 @@ class TSTTLeague:
             self.skill[player] = (mu, sigma)
 
     def _build_model(self):
-        # If no comparisons, use default mu
         if not self.matches:
-            return {p: DEFAULT_MU for p in self.players}
+            return {player: DEFAULT_MU for player in self.players}
 
-        # Build composition and results for History
-        # composition: list of events, each event is [team_winner, team_loser]
-        composition = []
-        results = []
+        composition, results = [], []
         for winner, loser in self.matches:
             composition.append([[winner], [loser]])
             results.append([1, 0])
 
         hist = History(composition, results)
-        curves = hist.learning_curves()
+        hist.convergence()  # propagate information:contentReference[oaicite:1]{index=1}
 
         means = {}
         for player in self.players:
-            if player in curves and curves[player]:
-                # curves[player] is list of (time, Gaussian)
-                _, gauss = curves[player][-1]
+            if player in hist.learning_curves() and hist.learning_curves()[player]:
+                _, gauss = hist.learning_curves()[player][-1]
                 means[player] = gauss.mu
             else:
                 means[player] = DEFAULT_MU
+
+        # update self.skill so recommend_pair can use the current μ values
+        for player, mu in means.items():
+            self.skill[player] = (mu, self.skill[player][1])
         return means
 
     def get_ranked_players(self):
         means = self._build_model()
         # Sort descending by mean
-        return [p for p in sorted(means, key=lambda x: -means[x])]
+        return [player for player in sorted(means, key=lambda x: -means[x])]
 
     def recommend_pair(self) -> tuple[str, str]:
         # Pick pair with closest current mu (from self.skill)
         best_pair = None
         best_gap = float("inf")
-        for a, b in combinations(self.players, 2):
-            mu_a, _ = self.skill[a]
-            mu_b, _ = self.skill[b]
-            gap = abs(mu_a - mu_b)
+        for left, right in pairwise(self.get_ranked_players()):
+            mu_left, _ = self.skill[left]
+            mu_right, _ = self.skill[right]
+            gap = abs(mu_left - mu_right)
             if gap < best_gap:
                 best_gap = gap
-                best_pair = (a, b)
+                best_pair = (left, right)
         if best_pair is None:
             raise RuntimeError("league perfectly sorted")
         return best_pair
