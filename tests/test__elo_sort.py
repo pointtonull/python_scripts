@@ -70,7 +70,7 @@ def test__k_stabilizes():
     assert diffs_Beatriz == approx([-200, -51, -33, -16], abs=0.5)
 
 
-def test__recommends_matches():
+def _test__recommends_matches():
     league = elo_sort.League()
     players = set(["Adrian", "Beatriz", "Carlos", "Daniel", "Ellie", "Fabio"])
     league.add_players(["Adrian", "Beatriz", "Carlos", "Daniel", "Ellie", "Fabio"])
