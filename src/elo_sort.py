@@ -21,6 +21,7 @@ os.makedirs(LEAGUES_FOLDER, exist_ok=True)
 OVERLAP_THRESHOLD = 0.01
 
 
+
 def calculate_elo(elo, result, expected_result, k):
     new_elo = elo + k * (result - expected_result)
     return new_elo
