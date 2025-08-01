@@ -88,6 +88,8 @@ def _summarize(text, model="auto"):
 def _split_task(task, model="auto"):
     model = model if model != "auto" else DEFAULT_MODEL
 
+    short_task = task.split(":")[-1].strip()
+    original_category = task[:-len(short_task) - 1].strip()
     tool = {
         "type": "function",
         "function": {
@@ -96,10 +98,14 @@ def _split_task(task, model="auto"):
             "parameters": {
                 "type": "object",
                 "properties": {
+                    "category": {
+                        "type": "string",
+                        "description": "Category of the subtasks.",
+                    },
                     "subtasks": {
                         "type": "array",
-                        "items": {"type": "string", "pattern": r"^- \\[ \\] .+?: .+"},
-                        "description": "List of subtasks in markdown checkbox format.",
+                        "items": {"type": "string"},
+                        "description": "List of subtasks.",
                     }
                 },
                 "required": ["subtasks"],
@@ -112,10 +118,11 @@ def _split_task(task, model="auto"):
         {
             "role": "user",
             "content": (
-                "Split the following task into subtasks, each doable in 30 minutes or less.\n"
-                "Format each like this: `- [ ] category: detail`\n"
-                "All subtasks must share a common category.\n\n"
-                f"Task:\n{task}"
+                "Split the given task into subtasks.\n"
+                "These tasks are for a Principal Software Engineer who prefers TDD when possible.\n"
+                "Keep each task short, without explanations, reasons or comments.\n"
+                "The category should be the existing categories plus one that describes the given task.\n\n"
+                f"Given task:\n{task}"
             ),
         },
     ]
@@ -129,7 +136,10 @@ def _split_task(task, model="auto"):
 
     tool_call = response.choices[0].message.tool_calls[0]
     args = json.loads(tool_call.function.arguments)
-    return "\n".join(args["subtasks"])
+    sub_category = args["category"]
+    category = original_category + ": " + sub_category
+    subtasks = [f"- [ ] {category}: {task}" for task in args["subtasks"]]
+    return "\n".join(subtasks)
 
 
 def bat(content, language="python"):
