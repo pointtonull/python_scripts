@@ -19,15 +19,15 @@ DECAY_RATE = 0.05  # Soft pull toward prior
 
 class TSTTLeague:
     def __init__(self):
-        self.matches = []  # list of (winner, loser)
-        self.players = set()
-        self.skill = {}  # player -> (mu, sigma)
+        self.matches: list[tuple[str, str]] = []  # list of (winner, loser)
+        self.players: set[str] = set()
+        self.skill: dict[str, tuple[float, float]] = {}  # player -> (mu, sigma)
 
     def add_players(self, players):
-        for p in players:
-            if p not in self.skill:
-                self.skill[p] = (DEFAULT_MU, DEFAULT_SIGMA)
-            self.players.add(p)
+        for player in players:
+            if player not in self.skill:
+                self.skill[player] = (DEFAULT_MU, DEFAULT_SIGMA)
+            self.players.add(player)
 
     def add_result(self, winner, loser):
         self.matches.append((winner, loser))
@@ -48,8 +48,8 @@ class TSTTLeague:
         # composition: list of events, each event is [team_winner, team_loser]
         composition = []
         results = []
-        for w, l in self.matches:
-            composition.append([[w], [l]])
+        for winner, loser in self.matches:
+            composition.append([[winner], [loser]])
             results.append([1, 0])
 
         hist = History(composition, results)
@@ -90,7 +90,7 @@ class TSTTLeague:
 LEAGUE_CACHE = {}
 
 
-def sorted_tstt(players, league_name, top=None, limit=None, key=None, minimum=0):
+def sorted_tstt(players, league_name=None, top=None, limit=None, key=None, minimum=0):
     """
     Sort players by TrueSkill Through time.
 
@@ -98,12 +98,12 @@ def sorted_tstt(players, league_name, top=None, limit=None, key=None, minimum=0)
     ----------
     players : list of str
         List of players to sort.
-    league_name : str
-        Name of the league to use. If not found, a new league is created.
+    league_name : str, optional
+        Name of the league to use. If not found, a new league is created. If None, the league is not saved.
     top : int, optional
         Number of players to consider for the recommendation. If None, all players are considered.
     limit : int, optional
-        Maximum number of iterations to run. If None, the limit is set to the square root of the number of players.
+        Maximum number of iterations to run. If None, the limit is set to N*log(N)
     key : callable, optional
         Function to use to sort the players.
     minimum : int, optional
@@ -116,24 +116,26 @@ def sorted_tstt(players, league_name, top=None, limit=None, key=None, minimum=0)
         limit = ceil(len(players) * log(len(players)))
     limit = max(limit, minimum)
 
-    league = LEAGUE_CACHE.get(league_name)
-    if league is None:
+    if league_name is None:
         league = TSTTLeague()
-        LEAGUE_CACHE[league_name] = league
+    else:
+        league = LEAGUE_CACHE.get(league_name)
+        if league is None:
+            league = TSTTLeague()
+            LEAGUE_CACHE[league_name] = league
 
     league.add_players(players)
 
     for _ in range(limit):
-        league._apply_decay()
         try:
-            a, b = league.recommend_pair()
+            left, right = league.recommend_pair()
         except Exception:
             break
-        ka = key(a) if key else a
-        kb = key(b) if key else b
-        if ka < kb:
-            league.add_result(b, a)
+        key_left = key(left) if key else left
+        key_right = key(right) if key else right
+        if key_left < key_right:
+            league.add_result(right, left)
         else:
-            league.add_result(a, b)
+            league.add_result(left, right)
 
     return league.get_ranked_players()
