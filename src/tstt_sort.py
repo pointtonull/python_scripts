@@ -6,10 +6,40 @@
 # ]
 # ///
 
+
+"""
+- **Bayesian ranking via TrueSkillThroughTime**
+    By modeling task priorities as posterior means (μ) in a Bayesian framework,
+    the system naturally captures and quantifies uncertainty—so you can trust
+    that the order reflects both what’s known and how confident the model is in
+    each decision.
+
+- **Information-Value (EVOI) match selection**
+    Using Expected Value of Information to choose which two tasks to compare
+    next ensures every comparison maximally reduces uncertainty, meaning you’ll
+    need far fewer manual decisions to converge on an accurate ranking.
+
+- **Mean-reversion decay**
+    Scores gently drift back to the global prior between comparisons,
+    preventing the ranking distribution from collapsing or “deflating” as tasks
+    are completed or removed, and keeping new tasks calibrated correctly.
+
+- **Pairwise comparison loop**
+    Presenting just two tasks at a time for comparison simplifies the user
+    interface, focuses human attention on the most impactful choices, and
+    integrates seamlessly into Vim, CLI, or TUI workflows.
+
+- **Persistent disk-backed storage**
+    By saving and loading league state (including all past comparisons and
+    inferred skill distributions), you never have to re-compare tasks you’ve
+    already judged—new items slot in against an existing foundation, saving
+    time and effort.
+"""
+
 from math import ceil, log
 from itertools import combinations
 
-from trueskillthroughtime import History, Gaussian
+from trueskillthroughtime import History
 
 
 DEFAULT_MU = 25.0
@@ -56,13 +86,13 @@ class TSTTLeague:
         curves = hist.learning_curves()
 
         means = {}
-        for p in self.players:
-            if p in curves and curves[p]:
-                # curves[p] is list of (time, Gaussian)
-                _, gauss = curves[p][-1]
-                means[p] = gauss.mu
+        for player in self.players:
+            if player in curves and curves[player]:
+                # curves[player] is list of (time, Gaussian)
+                _, gauss = curves[player][-1]
+                means[player] = gauss.mu
             else:
-                means[p] = DEFAULT_MU
+                means[player] = DEFAULT_MU
         return means
 
     def get_ranked_players(self):
