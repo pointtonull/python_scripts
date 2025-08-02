@@ -36,10 +36,10 @@
     time and effort.
 """
 
-from math import ceil, log
-from itertools import combinations, pairwise
+from math import ceil, log, sqrt
+from itertools import combinations
 
-from trueskillthroughtime import History
+from trueskillthroughtime import History, cdf, Player, Game
 
 
 DEFAULT_MU = 25.0
@@ -100,18 +100,72 @@ class TSTTLeague:
         return [player for player in sorted(means, key=lambda x: -means[x])]
 
     def recommend_pair(self) -> tuple[str, str]:
-        # Pick pair with closest current mu (from self.skill)
+        if not self.players:
+            raise RuntimeError("no players to compare")
+
+        # current total variance (sum of σ²)
+        prior_var = sum(sigma * sigma for _, sigma in self.skill.values())
+
         best_pair = None
-        best_gap = float("inf")
-        for left, right in pairwise(self.get_ranked_players()):
-            mu_left, _ = self.skill[left]
-            mu_right, _ = self.skill[right]
-            gap = abs(mu_left - mu_right)
-            if gap < best_gap:
-                best_gap = gap
+        best_evoi = -1.0
+
+        # for each candidate match
+        for left, right in combinations(self.players, 2):
+            mu_left, sig_left = self.skill[left]
+            mu_right, sig_right = self.skill[right]
+            # approximate win probability under two independent Gaussians
+            denom = sqrt(sig_left * sig_left + sig_right * sig_right)
+            if denom == 0:
+                continue
+            p_left_wins = cdf(0.0, mu_right - mu_left, denom)  # P(left beats right)
+
+            # simulate left wins
+            comp_left = [[x] for x in [left, right]]
+            res_left = [[1, 0]]
+            hist_left = History(
+                [[[left], [right]] + comp for comp in []], [[1, 0]] + []
+            )  # reuse existing matches below
+            # actually we need full history, so:
+            composition = [[[w], [l]] for (w, l) in self.matches] + [[[left], [right]]]
+            results = [[1, 0] for _ in self.matches] + [[1, 0]]
+            hist_left = History(composition, results)
+            hist_left.convergence()  # propagate information
+
+            # simulate right wins
+            composition_right = [[[w], [l]] for (w, l) in self.matches] + [
+                [[right], [left]]
+            ]
+            results_right = [[1, 0] for _ in self.matches] + [[1, 0]]
+            hist_right = History(composition_right, results_right)
+            hist_right.convergence()
+
+            # compute total posterior variance for each scenario
+            var_left = 0.0
+            var_right = 0.0
+            curves_left = hist_left.learning_curves()
+            curves_right = hist_right.learning_curves()
+            for player in self.players:
+                # get last sigma
+                sigma_left = curves_left.get(
+                    player, [(None, type("G", (), {"sigma": DEFAULT_SIGMA}))]
+                )[-1][1].sigma
+                sigma_right = curves_right.get(
+                    player, [(None, type("G", (), {"sigma": DEFAULT_SIGMA}))]
+                )[-1][1].sigma
+                var_left += sigma_left * sigma_left
+                var_right += sigma_right * sigma_right
+
+            # expected posterior variance
+            exp_post_var = p_left_wins * var_left + (1 - p_left_wins) * var_right
+            evoi = prior_var - exp_post_var
+
+            if evoi > best_evoi:
+                best_evoi = evoi
                 best_pair = (left, right)
+
         if best_pair is None:
-            raise RuntimeError("league perfectly sorted")
+            raise RuntimeError("league perfectly sorted or no informative comparison")
+
         return best_pair
 
 
